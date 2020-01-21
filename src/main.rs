@@ -16,7 +16,7 @@ fn handle_client(mut stream: TcpStream) {
             // TODO(ljoswiak): Handle/log error.
             stream.shutdown(Shutdown::Both).unwrap();
             false
-        }
+        },
     } {}
 }
 
@@ -29,11 +29,11 @@ fn main() {
                 thread::spawn(move|| {
                     handle_client(stream);
                 });
-            }
+            },
             Err(_) => {
                 // TODO(ljoswiak): Handle/log error.
-            }
+            },
         }
     }
-    println!("Hello, world!");
+    drop(listener);
 }
