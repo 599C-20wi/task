@@ -28,7 +28,7 @@ fn handle_client(mut stream: TcpStream) {
 fn main() {
     simple_logger::init().unwrap();
 
-    let listener = TcpListener::bind(format!("localhost:{}", PORT)).unwrap();
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", PORT)).unwrap();
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
