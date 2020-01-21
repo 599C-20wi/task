@@ -1,3 +1,6 @@
+#[macro_use]
+extern crate log;
+
 use std::thread;
 use std::net::{TcpListener, TcpStream, Shutdown};
 use std::io::{Read, Write};
@@ -9,12 +12,13 @@ fn handle_client(mut stream: TcpStream) {
     let mut data = [0 as u8; BUFFER_SIZE];
     while match stream.read(&mut data) {
         Ok(size) => {
+            trace!("stream read {} bytes", size);
             stream.write(&data[0..size]).unwrap();
             true
         },
-        Err(_) => {
-            // TODO(ljoswiak): Handle/log error.
+        Err(e) => {
             stream.shutdown(Shutdown::Both).unwrap();
+            error!("stream read failed: {}", e);
             false
         },
     } {}
@@ -22,16 +26,19 @@ fn handle_client(mut stream: TcpStream) {
 
 
 fn main() {
+    simple_logger::init().unwrap();
+
     let listener = TcpListener::bind(format!("localhost:{}", PORT)).unwrap();
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
+                info!("client successfully connected");
                 thread::spawn(move|| {
                     handle_client(stream);
                 });
             },
-            Err(_) => {
-                // TODO(ljoswiak): Handle/log error.
+            Err(e) => {
+                error!("client connect failed: {}", e);
             },
         }
     }
