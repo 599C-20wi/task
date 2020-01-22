@@ -14,10 +14,16 @@ const PORT: u16 = 3333;
 
 fn handle_client(mut stream: TcpStream) {
     let mut data = [0 as u8; BUFFER_SIZE];
-    while match stream.read(&mut data) {
+    'read: while match stream.read(&mut data) {
         Ok(size) => {
             trace!("stream read {} bytes", size);
-            let request = Request::deserialize(&data);
+            let request = match Request::deserialize(&data) {
+                Ok(message) => message,
+                Err(e) => {
+                    error!("deserialization failed: {}", e);
+                    continue 'read;
+                }
+            };
             let response = Response{
                 id: request.id,
                 text: request.text,

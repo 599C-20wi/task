@@ -1,4 +1,5 @@
 use serde::{Serialize, Deserialize};
+use serde_json::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Request {
@@ -12,8 +13,8 @@ impl Request {
         serde_json::to_vec(&self).unwrap()
     }
 
-    pub fn deserialize(serialized: &[u8]) -> Request {
-        serde_json::from_slice(&serialized).unwrap()
+    pub fn deserialize(serialized: &[u8]) -> Result<Request, Error> {
+        serde_json::from_slice(&serialized)
     }
 }
 
@@ -28,7 +29,7 @@ impl Response {
         serde_json::to_vec(&self).unwrap()
     }
 
-    pub fn deserialize(serialized: &[u8]) -> Response {
-        serde_json::from_slice(&serialized).unwrap()
+    pub fn deserialize(serialized: &[u8]) -> Result<Response, Error> {
+        serde_json::from_slice(&serialized)
     }
 }
