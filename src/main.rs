@@ -5,7 +5,10 @@ use std::thread;
 use std::net::{TcpListener, TcpStream, Shutdown};
 use std::io::{Read, Write};
 
-const BUFFER_SIZE: usize = 250;
+pub mod translate;
+pub mod message;
+
+const BUFFER_SIZE: usize = 256;
 const PORT: u16 = 3333;
 
 fn handle_client(mut stream: TcpStream) {
@@ -13,7 +16,12 @@ fn handle_client(mut stream: TcpStream) {
     while match stream.read(&mut data) {
         Ok(size) => {
             trace!("stream read {} bytes", size);
-            stream.write(&data[0..size]).unwrap();
+            let request = crate::message::Request::deserialize(&data);
+            let response = crate::message::Response{
+                id: request.id,
+                text: request.text,
+            };
+            stream.write(&response.serialize()).unwrap();
             true
         },
         Err(e) => {
@@ -23,7 +31,6 @@ fn handle_client(mut stream: TcpStream) {
         },
     } {}
 }
-
 
 fn main() {
     simple_logger::init().unwrap();
