@@ -10,15 +10,14 @@ use crate::message::{Request, Response};
 pub mod message;
 pub mod translate;
 
-const BUFFER_SIZE: usize = 256;
 const PORT: u16 = 3333;
 
 fn handle_client(mut stream: TcpStream) {
-    let mut data = [0 as u8; BUFFER_SIZE];
-    'read: while match stream.read(&mut data) {
+    let mut buffer = Vec::new();
+    'read: while match stream.read_to_end(&mut buffer) {
         Ok(size) => {
             trace!("stream read {} bytes", size);
-            let request = match Request::deserialize(&data) {
+            let request = match Request::deserialize(&buffer) {
                 Ok(message) => message,
                 Err(e) => {
                     error!("deserialization failed: {}", e);
