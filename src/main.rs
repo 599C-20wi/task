@@ -7,6 +7,7 @@ use std::io::{Read, Write};
 
 pub mod translate;
 pub mod message;
+use crate::message::{Request, Response};
 
 const BUFFER_SIZE: usize = 256;
 const PORT: u16 = 3333;
@@ -16,8 +17,8 @@ fn handle_client(mut stream: TcpStream) {
     while match stream.read(&mut data) {
         Ok(size) => {
             trace!("stream read {} bytes", size);
-            let request = crate::message::Request::deserialize(&data);
-            let response = crate::message::Response{
+            let request = Request::deserialize(&data);
+            let response = Response{
                 id: request.id,
                 text: request.text,
             };
