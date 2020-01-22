@@ -1,13 +1,14 @@
 #[macro_use]
 extern crate log;
 
-use std::thread;
-use std::net::{TcpListener, TcpStream, Shutdown};
 use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream, Shutdown};
+use std::thread;
 
-pub mod translate;
-pub mod message;
 use crate::message::{Request, Response};
+
+pub mod message;
+pub mod translate;
 
 const BUFFER_SIZE: usize = 256;
 const PORT: u16 = 3333;
