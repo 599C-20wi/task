@@ -3,7 +3,6 @@ use serde_json::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Request {
-    pub id: usize,
     pub lang: crate::translate::Language,
     pub text: String,
 }
@@ -20,7 +19,7 @@ impl Request {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Response {
-    Success{
+    Accept{
         text: String,
     },
     Reject{

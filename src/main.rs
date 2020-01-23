@@ -29,7 +29,7 @@ fn handle_client(mut stream: TcpStream) {
                     continue 'read;
                 }
             };
-            let response = Response::Success{
+            let response = Response::Accept{
                 text: request.text,
             };
             stream.write(&response.serialize()).unwrap();
