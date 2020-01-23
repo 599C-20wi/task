@@ -19,9 +19,13 @@ impl Request {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
-pub struct Response {
-    pub id: usize,
-    pub text: String,
+pub enum Response {
+    Success{
+        text: String,
+    },
+    Reject{
+        error: String,
+    },
 }
 
 impl Response {
