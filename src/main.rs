@@ -1,21 +1,24 @@
 #[macro_use]
 extern crate log;
 
-use std::io::{Read, Write};
+use std::fs::File;
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::net::{TcpListener, TcpStream, Shutdown};
 use std::thread;
 
 use crate::message::{Request, Response};
+use crate::face::{Expression};
 
 pub mod message;
-pub mod translate;
+pub mod face;
 
-const BUFFER_SIZE: usize = 256;
 const PORT: u16 = 3333;
 
-fn handle_client(mut stream: TcpStream) {
-    let mut buffer = [0 as u8; BUFFER_SIZE];
-    'read: while match stream.read(&mut buffer) {
+fn handle_client(stream: TcpStream) {
+    let mut reader = BufReader::new(&stream);
+    let mut writer = BufWriter::new(&stream);
+    let mut buffer = Vec::new();
+    'read: while match reader.read_until(b'\n', &mut buffer) {
         Ok(size) => {
             if size == 0 {
                 break 'read;
@@ -29,15 +32,37 @@ fn handle_client(mut stream: TcpStream) {
                     continue 'read;
                 }
             };
-            let response = Response::Accept{
-                text: request.text,
+
+            let mut pos = 0;
+            let mut buffer = match File::create("face.jpg") {
+                Ok(file) => file,
+                Err(error) => {
+                    error!("file create failed: {}", error);
+                    continue 'read;
+                },
             };
-            stream.write(&response.serialize()).unwrap();
+            while pos < request.image.len() {
+                let bytes_written = match buffer.write(&request.image[pos..]) {
+                    Ok(size) => size,
+                    Err(error) => {
+                        error!("write failed: {}", error);
+                        continue 'read;
+                    },
+                };
+                pos += bytes_written;
+            }
+
+            let response = Response::Accept{
+                expression: Expression::Anger,
+            };
+            let serialized = response.serialize();
+            writer.write(serialized.as_bytes()).unwrap();
+            writer.flush().unwrap();
             true
         },
-        Err(e) => {
+        Err(error) => {
             stream.shutdown(Shutdown::Both).unwrap();
-            error!("stream read failed: {}", e);
+            error!("stream read failed: {}", error);
             false
         },
     } {}
