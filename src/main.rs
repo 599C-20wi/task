@@ -7,7 +7,6 @@ use std::net::{TcpListener, TcpStream, Shutdown};
 use std::thread;
 
 use crate::message::{Request, Response};
-use crate::face::{Expression};
 
 pub mod message;
 pub mod face;
@@ -53,7 +52,7 @@ fn handle_client(stream: TcpStream) {
             }
 
             let response = Response::Accept{
-                expression: Expression::Anger,
+                matches_expression: true,
             };
             let serialized = response.serialize();
             writer.write(serialized.as_bytes()).unwrap();

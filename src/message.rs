@@ -3,6 +3,7 @@ use serde_json::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Request {
+    pub expression: crate::face::Expression,
     pub image: Vec<u8>,
 }
 
@@ -25,7 +26,7 @@ impl Request {
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Response {
     Accept{
-        expression: crate::face::Expression,
+        matches_expression: bool,
     },
     Reject{
         error: String,
