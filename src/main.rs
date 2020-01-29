@@ -33,7 +33,7 @@ fn handle_client(stream: TcpStream) {
             };
 
             let mut pos = 0;
-            let mut buffer = match File::create("face.jpg") {
+            let mut image_buffer = match File::create("face.jpg") {
                 Ok(file) => file,
                 Err(error) => {
                     error!("file create failed: {}", error);
@@ -41,7 +41,7 @@ fn handle_client(stream: TcpStream) {
                 },
             };
             while pos < request.image.len() {
-                let bytes_written = match buffer.write(&request.image[pos..]) {
+                let bytes_written = match image_buffer.write(&request.image[pos..]) {
                     Ok(size) => size,
                     Err(error) => {
                         error!("write failed: {}", error);
@@ -57,6 +57,7 @@ fn handle_client(stream: TcpStream) {
             let serialized = response.serialize();
             writer.write(serialized.as_bytes()).unwrap();
             writer.flush().unwrap();
+            buffer.clear();
             true
         },
         Err(error) => {
