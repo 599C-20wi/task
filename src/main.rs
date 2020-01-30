@@ -20,7 +20,6 @@ fn save_image(image: Vec<u8>, name: &str) -> Result<(), io::Error> {
     let mut image_buffer = match File::create(name) {
         Ok(file) => file,
         Err(error) => {
-            error!("file create failed: {}", error);
             return Err(error);
         },
     };
@@ -29,7 +28,6 @@ fn save_image(image: Vec<u8>, name: &str) -> Result<(), io::Error> {
         let bytes_written = match image_buffer.write(&image[pos..]) {
             Ok(size) => size,
             Err(error) => {
-                error!("write failed: {}", error);
                 return Err(error);
             },
         };
