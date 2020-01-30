@@ -55,7 +55,7 @@ fn handle_client(stream: TcpStream) {
                 matches_expression: true,
             };
             let serialized = response.serialize();
-            writer.write(serialized.as_bytes()).unwrap();
+            writer.write_all(serialized.as_bytes()).unwrap();
             writer.flush().unwrap();
             buffer.clear();
             true
