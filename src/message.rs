@@ -1,4 +1,4 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use serde_json::Error;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -25,12 +25,8 @@ impl Request {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Response {
-    Accept{
-        matches_expression: bool,
-    },
-    Reject{
-        error: String,
-    },
+    Accept { matches_expression: bool },
+    Reject { error: String },
 }
 
 impl Response {

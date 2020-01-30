@@ -3,13 +3,13 @@ extern crate log;
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::net::{TcpListener, TcpStream, Shutdown};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::thread;
 
 use crate::message::{Request, Response};
 
-pub mod message;
 pub mod face;
+pub mod message;
 
 const PORT: u16 = 3333;
 
@@ -38,7 +38,7 @@ fn handle_client(stream: TcpStream) {
                 Err(error) => {
                     error!("file create failed: {}", error);
                     continue 'read;
-                },
+                }
             };
             while pos < request.image.len() {
                 let bytes_written = match image_buffer.write(&request.image[pos..]) {
@@ -46,12 +46,12 @@ fn handle_client(stream: TcpStream) {
                     Err(error) => {
                         error!("write failed: {}", error);
                         continue 'read;
-                    },
+                    }
                 };
                 pos += bytes_written;
             }
 
-            let response = Response::Accept{
+            let response = Response::Accept {
                 matches_expression: true,
             };
             let serialized = response.serialize();
@@ -59,12 +59,12 @@ fn handle_client(stream: TcpStream) {
             writer.flush().unwrap();
             buffer.clear();
             true
-        },
+        }
         Err(error) => {
             stream.shutdown(Shutdown::Both).unwrap();
             error!("stream read failed: {}", error);
             false
-        },
+        }
     } {}
 }
 
@@ -76,13 +76,13 @@ fn main() {
         match stream {
             Ok(stream) => {
                 info!("client successfully connected");
-                thread::spawn(move|| {
+                thread::spawn(move || {
                     handle_client(stream);
                 });
-            },
+            }
             Err(e) => {
                 error!("client connect failed: {}", e);
-            },
+            }
         }
     }
     drop(listener);
