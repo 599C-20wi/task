@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::net::{TcpListener, TcpStream, Shutdown};
 use std::thread;
+use std::io;
 
 use crate::message::{Request, Response};
 
@@ -12,6 +13,30 @@ pub mod message;
 pub mod face;
 
 const PORT: u16 = 3333;
+
+
+fn save_image(image: Vec<u8>, name: &str) -> Result<(), io::Error> {
+    let mut pos = 0;
+    let mut image_buffer = match File::create(name) {
+        Ok(file) => file,
+        Err(error) => {
+            error!("file create failed: {}", error);
+            return Err(error);
+        },
+    };
+
+    while pos < image.len() {
+        let bytes_written = match image_buffer.write(&image[pos..]) {
+            Ok(size) => size,
+            Err(error) => {
+                error!("write failed: {}", error);
+                return Err(error);
+            },
+        };
+        pos += bytes_written;
+    }
+    Ok(())
+}
 
 fn handle_client(stream: TcpStream) {
     let mut reader = BufReader::new(&stream);
@@ -32,28 +57,15 @@ fn handle_client(stream: TcpStream) {
                 }
             };
 
-            let mut pos = 0;
-            let mut image_buffer = match File::create("face.jpg") {
-                Ok(file) => file,
-                Err(error) => {
-                    error!("file create failed: {}", error);
-                    continue 'read;
-                },
-            };
-            while pos < request.image.len() {
-                let bytes_written = match image_buffer.write(&request.image[pos..]) {
-                    Ok(size) => size,
-                    Err(error) => {
-                        error!("write failed: {}", error);
-                        continue 'read;
-                    },
-                };
-                pos += bytes_written;
+            if let Err(e) = save_image(request.image, "face.jpg") {
+                error!("save image failed: {}", e);
+                continue 'read;
             }
 
             let response = Response::Accept{
                 matches_expression: true,
             };
+
             let serialized = response.serialize();
             writer.write(serialized.as_bytes()).unwrap();
             writer.flush().unwrap();
