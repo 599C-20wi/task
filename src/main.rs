@@ -3,14 +3,14 @@ extern crate log;
 
 use std::fs::File;
 use std::io::{BufRead, BufReader, BufWriter, Write};
-use std::net::{TcpListener, TcpStream, Shutdown};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::thread;
 use std::io;
 
 use crate::message::{Request, Response};
 
-pub mod message;
 pub mod face;
+pub mod message;
 
 const PORT: u16 = 3333;
 
@@ -60,21 +60,21 @@ fn handle_client(stream: TcpStream) {
                 continue 'read;
             }
 
-            let response = Response::Accept{
+            let response = Response::Accept {
                 matches_expression: true,
             };
 
             let serialized = response.serialize();
-            writer.write(serialized.as_bytes()).unwrap();
+            writer.write_all(serialized.as_bytes()).unwrap();
             writer.flush().unwrap();
             buffer.clear();
             true
-        },
+        }
         Err(error) => {
             stream.shutdown(Shutdown::Both).unwrap();
             error!("stream read failed: {}", error);
             false
-        },
+        }
     } {}
 }
 
@@ -86,13 +86,13 @@ fn main() {
         match stream {
             Ok(stream) => {
                 info!("client successfully connected");
-                thread::spawn(move|| {
+                thread::spawn(move || {
                     handle_client(stream);
                 });
-            },
+            }
             Err(e) => {
                 error!("client connect failed: {}", e);
-            },
+            }
         }
     }
     drop(listener);
