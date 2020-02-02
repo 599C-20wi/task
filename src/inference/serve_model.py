@@ -19,13 +19,11 @@ def start_server(model, port):
 
 	while True:
 		img_path = conn.recv(1024)
-		if not img_path or img_path == "quit\n":
-			break
 		img_path = img_path.rstrip("\n")
 		img = image.load_img(img_path, target_size=(IMG_WIDTH, IMG_HEIGHT))
 		img = image.img_to_array(img)
 		img = np.expand_dims(img, axis=0)
-		print(model.predict(img))
+		conn.sendall("{}".format(int(model.predict(img)[0][0])))
 	conn.close()
 
 
