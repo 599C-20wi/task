@@ -3,6 +3,7 @@ extern crate log;
 
 use std::env;
 use std::fs::File;
+<<<<<<< HEAD
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream, Shutdown};
 use std::process::{Child, Command};
@@ -13,8 +14,8 @@ use std::io;
 use crate::message::{Request, Response};
 use crate::face::{Expression};
 
-pub mod message;
 pub mod face;
+pub mod message;
 
 const MODEL_SERVER_PATH: &str = "src/inference/serve_model.py";
 const MODEL_SERVER_PORT: u16 = 65432;
@@ -162,16 +163,16 @@ fn handle_client(stream: TcpStream) {
             };
 
             let serialized = response.serialize();
-            writer.write(serialized.as_bytes()).unwrap();
+            writer.write_all(serialized.as_bytes()).unwrap();
             writer.flush().unwrap();
             buffer.clear();
             true
-        },
+        }
         Err(error) => {
             stream.shutdown(Shutdown::Both).unwrap();
             error!("stream read failed: {}", error);
             false
-        },
+        }
     } {}
 }
 
@@ -183,13 +184,13 @@ fn main() {
         match stream {
             Ok(stream) => {
                 info!("client successfully connected");
-                thread::spawn(move|| {
+                thread::spawn(move || {
                     handle_client(stream);
                 });
-            },
+            }
             Err(e) => {
                 error!("client connect failed: {}", e);
-            },
+            }
         }
     }
     drop(listener);
