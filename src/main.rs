@@ -3,7 +3,6 @@ extern crate log;
 
 use std::env;
 use std::fs::File;
-<<<<<<< HEAD
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{TcpListener, TcpStream, Shutdown};
 use std::process::{Child, Command};
