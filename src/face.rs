@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(PartialEq, Eq, Hash, Serialize, Deserialize, Debug)]
 pub enum Expression {
     Anger,
     Happiness,
