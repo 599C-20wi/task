@@ -13,6 +13,8 @@ use std::time::Duration;
 use crate::face::Expression;
 use crate::message::{Request, Response};
 
+use assigner::message::{Update};
+
 pub mod face;
 pub mod message;
 
@@ -26,6 +28,7 @@ const IMG_NAME: &str = "face.jpg";
 const BUFFER_SIZE: usize = 16;
 
 const CLIENT_PORT: u16 = 3333;
+const ASSIGNER_PORT: u16 = 4333;
 
 fn save_image(image: Vec<u8>, name: &str) -> Result<(), io::Error> {
     let mut pos = 0;
@@ -179,9 +182,57 @@ fn handle_client(stream: TcpStream) {
     } {}
 }
 
+fn run_slicelet() {
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", ASSIGNER_PORT)).unwrap();
+    for stream in listener.incoming() {
+        match stream {
+            Ok(stream) => {
+                info!("assigner successfully connected");
+                
+                let mut reader = BufReader::new(&stream);
+                let mut buffer = Vec::new();
+                'read: while match reader.read_until(b'\n', &mut buffer) {
+                    Ok(size) => {
+                        if size == 0 {
+                            break 'read;
+                        }
+                        trace!("stream read {} bytes", size);
+
+                        let _update = match Update::deserialize(&buffer[..size]) {
+                            Ok(message) => message,
+                            Err(e) => {
+                                error!("deserialization failed: {}", e);
+                                continue 'read;
+                            }
+                        };
+                        
+                        // TODO: Update local assignments and running inference model.
+                        true
+                    }
+                    Err(e) => {
+                        stream.shutdown(Shutdown::Both).unwrap();
+                        error!("stream read failed: {}", e);
+                        false
+                    }
+                } {}
+            }
+            Err(e) => {
+                error!("assigner connect failed: {}", e);
+            }
+        }
+    }
+    drop(listener);
+}
+
 fn main() {
     simple_logger::init().unwrap();
 
+    // Spawn and detach thread (slicelet) for retrieving assignments.
+    thread::spawn(move || {
+        run_slicelet();
+    });
+
+    // Listen for incoming client connections.
     let listener = TcpListener::bind(format!("0.0.0.0:{}", CLIENT_PORT)).unwrap();
     for stream in listener.incoming() {
         match stream {
