@@ -28,7 +28,7 @@ const IMG_NAME: &str = "face.jpg";
 const BUFFER_SIZE: usize = 16;
 
 const CLIENT_PORT: u16 = 3333;
-const ASSIGNER_PORT: u16 = 4333;
+const ASSIGNER_LISTEN_PORT: u16 = 4233;
 
 fn save_image(image: Vec<u8>, name: &str) -> Result<(), io::Error> {
     let mut pos = 0;
@@ -183,7 +183,7 @@ fn handle_client(stream: TcpStream) {
 }
 
 fn run_slicelet() {
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", ASSIGNER_PORT)).unwrap();
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", ASSIGNER_LISTEN_PORT)).unwrap();
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
