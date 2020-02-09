@@ -13,7 +13,7 @@ use std::time::Duration;
 use crate::face::Expression;
 use crate::message::{Request, Response};
 
-use assigner::message::{Update};
+use assigner::message::Update;
 
 pub mod face;
 pub mod message;
@@ -188,7 +188,7 @@ fn run_slicelet() {
         match stream {
             Ok(stream) => {
                 info!("assigner successfully connected");
-                
+
                 let mut reader = BufReader::new(&stream);
                 let mut buffer = Vec::new();
                 'read: while match reader.read_until(b'\n', &mut buffer) {
@@ -205,7 +205,7 @@ fn run_slicelet() {
                                 continue 'read;
                             }
                         };
-                        
+
                         // TODO: Update local assignments and running inference model.
                         true
                     }
