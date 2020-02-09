@@ -19,7 +19,7 @@ pub mod face;
 pub mod message;
 
 const MODEL_SERVER_PATH: &str = "src/inference/serve_model.py";
-const MODEL_SERVER_PORT: u16 = 65432;
+const MODEL_SERVER_PORT: u16 = 4334;
 
 const ANGER_MODEL_PATH: &str = "src/inference/models/anger_model.h5";
 const HAPPINESS_MODEL_PATH: &str = "src/inference/models/happiness_model.h5";
@@ -52,7 +52,7 @@ fn save_image(image: Vec<u8>, name: &str) -> Result<(), io::Error> {
 }
 
 fn start_model(model_path: &str) -> Result<Child, io::Error> {
-    Command::new("python")
+    Command::new("python3")
         .arg(MODEL_SERVER_PATH)
         .arg(model_path)
         .arg(format!("{}", MODEL_SERVER_PORT))
@@ -90,7 +90,7 @@ fn handle_request(req: Request) -> Result<Response, io::Error> {
     }
 
     // Sleep to ensure model process is ready.
-    thread::sleep(Duration::from_millis(6000));
+    thread::sleep(Duration::from_millis(8000));
 
     // Send prediction request to child proc and listen for result.
     let prediction = match TcpStream::connect(format!("127.0.0.1:{}", MODEL_SERVER_PORT)) {
