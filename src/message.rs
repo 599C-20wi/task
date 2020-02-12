@@ -25,8 +25,13 @@ impl Request {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub enum Response {
-    Accept { matches_expression: bool },
-    Reject { error: String },
+    Accept {
+        matches_expression: bool,
+    },
+    Reject {
+        error_msg: String,
+        expression: crate::face::Expression,
+    },
 }
 
 impl Response {
