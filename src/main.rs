@@ -36,7 +36,7 @@ const IMG_NAME: &str = "face.jpg";
 const BUFFER_SIZE: usize = 16;
 
 const CLIENT_PORT: u16 = 3333;
-const ASSIGNER_PORT: u16 = 4333;
+const ASSIGNER_LISTEN_PORT: u16 = 4233;
 
 lazy_static! {
     static ref ASSIGNMENTS_COUNTER: Arc<RwLock<Vec<Slice>>> = Arc::new(RwLock::new(Vec::new()));
@@ -262,7 +262,7 @@ fn update_models() -> Result<(), io::Error> {
 }
 
 fn run_slicelet() {
-    let listener = TcpListener::bind(format!("0.0.0.0:{}", ASSIGNER_PORT)).unwrap();
+    let listener = TcpListener::bind(format!("0.0.0.0:{}", ASSIGNER_LISTEN_PORT)).unwrap();
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
