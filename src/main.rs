@@ -211,51 +211,45 @@ fn update_assignments(assigned: Vec<Slice>, unassigned: Vec<Slice>) {
     }
 }
 
-// Ensure that all assigned expressions have inference models running, and
-// that all unassigned expression do not.
-fn update_models() -> Result<(), io::Error> {
-    let anger_is_assigned = expression_is_assigned(&Expression::Anger);
+fn update_model(expr: &Expression, model_path: &str) -> Result<(), io::Error> {
+    let anger_is_assigned = expression_is_assigned(expr);
     let update_counter = Arc::clone(&MODEL_PROCS_COUNTER);
     let mut model_procs = update_counter.write().unwrap();
 
-    if anger_is_assigned && !model_procs.contains_key(&Expression::Anger) {
-        trace!("starting anger inference model");
-        let child = match start_model(ANGER_MODEL_PATH) {
+    if anger_is_assigned && !model_procs.contains_key(expr) {
+        trace!("starting {:?} inference model", expr);
+        let child = match start_model(&model_path) {
             Ok(proc) => proc,
             Err(e) => {
-                error!("failed to start anger model: {}", e);
+                error!("failed to start {:?} model: {}", expr, e);
                 return Err(e);
             }
         };
-        model_procs.insert(Expression::Anger, child);
+        model_procs.insert(expr.clone(), child);
 
         // Sleep to ensure model process is ready.
         thread::sleep(Duration::from_millis(8000));
-        trace!("started anger inference model");
-    } else if !anger_is_assigned && model_procs.contains_key(&Expression::Anger) {
-        trace!("killing anger inference model");
-        kill_model(model_procs.get_mut(&Expression::Anger).unwrap()).unwrap();
-        trace!("killed anger inference model");
+        trace!("started {:?} inference model", expr);
+    } else if !anger_is_assigned && model_procs.contains_key(expr) {
+        trace!("killing {:?} inference model", expr);
+        kill_model(model_procs.get_mut(expr).unwrap()).unwrap();
+        trace!("killed {:?} inference model", expr);
     }
 
-    let happiness_is_assigned = expression_is_assigned(&Expression::Happiness);
-    if happiness_is_assigned && !model_procs.contains_key(&Expression::Happiness) {
-        trace!("starting happiness inference model");
-        let child = match start_model(HAPPINESS_MODEL_PATH) {
-            Ok(proc) => proc,
-            Err(e) => {
-                error!("failed to start happiness model: {}", e);
-                return Err(e);
-            }
-        };
-        model_procs.insert(Expression::Happiness, child);
+    Ok(())
+}
 
-        thread::sleep(Duration::from_millis(8000));
-        trace!("started happiness inference model");
-    } else if !happiness_is_assigned && model_procs.contains_key(&Expression::Happiness) {
-        trace!("killing happiness inference model");
-        kill_model(model_procs.get_mut(&Expression::Happiness).unwrap()).unwrap();
-        trace!("killed happiness inference model");
+// Ensure that all assigned expressions have inference models running, and
+// that all unassigned expression do not.
+fn update_models() -> Result<(), io::Error> {
+    if let Err(e) = update_model(&Expression::Anger, ANGER_MODEL_PATH) {
+        error!("could not update anger model: {}", e);
+        return Err(e);
+    }
+
+    if let Err(e) = update_model(&Expression::Happiness, HAPPINESS_MODEL_PATH) {
+        error!("could not update happiness model: {}", e);
+        return Err(e);
     }
 
     Ok(())
