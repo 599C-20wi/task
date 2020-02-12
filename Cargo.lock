@@ -3,6 +3,7 @@
 [[package]]
 name = "assigner"
 version = "0.1.0"
+source = "git+https://github.com/599C-20wi/assigner#e4d61960bf38c12da18b138d308bee26dd44ef9b"
 dependencies = [
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -178,7 +179,7 @@ dependencies = [
 name = "task"
 version = "0.1.0"
 dependencies = [
- "assigner 0.1.0",
+ "assigner 0.1.0 (git+https://github.com/599C-20wi/assigner)",
  "lazy_static 1.4.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.8 (registry+https://github.com/rust-lang/crates.io-index)",
  "serde 1.0.104 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -221,6 +222,7 @@ version = "0.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [metadata]
+"checksum assigner 0.1.0 (git+https://github.com/599C-20wi/assigner)" = "<none>"
 "checksum atty 0.2.14 (registry+https://github.com/rust-lang/crates.io-index)" = "d9b39be18770d11421cdb1b9947a45dd3f37e93092cbf377614828a319d5fee8"
 "checksum autocfg 1.0.0 (registry+https://github.com/rust-lang/crates.io-index)" = "f8aac770f1885fd7e387acedd76065302551364496e46b3dd00860b2f8359b9d"
 "checksum cfg-if 0.1.10 (registry+https://github.com/rust-lang/crates.io-index)" = "4785bdd1c96b2a846b2bd7cc02e86b6b3dbf14e7e53446c4f54c92a361040822"

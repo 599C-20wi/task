@@ -88,7 +88,7 @@ fn expression_is_assigned(expr: &Expression) -> bool {
         }
     }
 
-    return false;
+    false
 }
 
 // Returns Accept message with inference result if req expression is assigned.
