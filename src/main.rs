@@ -194,11 +194,16 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
             let pool = pool.clone();
             let task = task.clone();
             thread::spawn(move || {
-                let mut prep = pool.prepare(r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)").unwrap();
-                prep.execute(params!{
+                let mut prep = pool
+                    .prepare(
+                        r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)",
+                    )
+                    .unwrap();
+                prep.execute(params! {
                     "task" => task,
                     "expression" => request.expression as i32,
-                }).unwrap();
+                })
+                .unwrap();
                 debug!("wrote request to database");
             });
 
@@ -329,8 +334,10 @@ fn main() {
     }
     let task: String = args[1].parse().unwrap();
 
-    let username = std::env::var("RDS_USERNAME").expect("expected RDS_USERNAME environment variable");
-    let password = std::env::var("RDS_PASSWORD").expect("expected RDS_PASSWORD environment variable");
+    let username =
+        std::env::var("RDS_USERNAME").expect("expected RDS_USERNAME environment variable");
+    let password =
+        std::env::var("RDS_PASSWORD").expect("expected RDS_PASSWORD environment variable");
     let host = std::env::var("RDS_HOST").expect("expected RDS_HOST environment variable");
     let port = std::env::var("RDS_PORT").expect("expected RDS_PORT environment variable");
 
