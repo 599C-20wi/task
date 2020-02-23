@@ -4,6 +4,9 @@ extern crate lazy_static;
 #[macro_use]
 extern crate log;
 
+#[macro_use]
+extern crate mysql;
+
 use std::collections::HashMap;
 use std::env;
 use std::fs::File;
@@ -15,6 +18,8 @@ use std::process::{Child, Command};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
+
+use mysql::Pool;
 
 use crate::face::Expression;
 use crate::message::{Request, Response};
@@ -44,7 +49,7 @@ lazy_static! {
         Arc::new(RwLock::new(HashMap::new()));
 }
 
-fn save_image(image: Vec<u8>, name: &str) -> Result<(), io::Error> {
+fn save_image(image: &[u8], name: &str) -> Result<(), io::Error> {
     let mut pos = 0;
     let mut image_buffer = match File::create(name) {
         Ok(file) => file,
@@ -93,7 +98,7 @@ fn expression_is_assigned(expr: &Expression) -> bool {
 
 // Returns Accept message with inference result if req expression is assigned.
 // Return err if non-inference error occurs, a Reject message otherwise.
-fn handle_request(req: Request) -> Result<Response, io::Error> {
+fn handle_request(req: &Request) -> Result<Response, io::Error> {
     let reject = Ok(Response::Reject {
         error_msg: String::from("not assigned to handle expression"),
         expression: req.expression.clone(),
@@ -105,7 +110,7 @@ fn handle_request(req: Request) -> Result<Response, io::Error> {
     }
 
     // Save the image to be processed by the model server.
-    if let Err(e) = save_image(req.image, IMG_NAME) {
+    if let Err(e) = save_image(&req.image, IMG_NAME) {
         error!("save image failed: {}", e);
         return Err(e);
     }
@@ -154,7 +159,7 @@ fn handle_request(req: Request) -> Result<Response, io::Error> {
     }
 }
 
-fn handle_client(stream: TcpStream) {
+fn handle_client(stream: TcpStream, pool: Pool, task: String) {
     let mut reader = BufReader::new(&stream);
     let mut writer = BufWriter::new(&stream);
     let mut buffer = Vec::new();
@@ -173,7 +178,7 @@ fn handle_client(stream: TcpStream) {
                 }
             };
 
-            let response = match handle_request(request) {
+            let response = match handle_request(&request) {
                 Ok(resp) => resp,
                 Err(_) => {
                     continue 'read;
@@ -184,6 +189,24 @@ fn handle_client(stream: TcpStream) {
             writer.write_all(serialized.as_bytes()).unwrap();
             writer.flush().unwrap();
             buffer.clear();
+
+            // Spawn a thread to write request metadata to the database.
+            let pool = pool.clone();
+            let task = task.clone();
+            thread::spawn(move || {
+                let mut prep = pool
+                    .prepare(
+                        r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)",
+                    )
+                    .unwrap();
+                prep.execute(params! {
+                    "task" => task,
+                    "expression" => request.expression as i32,
+                })
+                .unwrap();
+                debug!("wrote request to database");
+            });
+
             true
         }
         Err(error) => {
@@ -304,6 +327,23 @@ fn run_slicelet() {
 fn main() {
     simple_logger::init().unwrap();
 
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 2 {
+        println!("usage: cargo run <task-name>");
+        process::exit(1);
+    }
+    let task: String = args[1].parse().unwrap();
+
+    let username =
+        std::env::var("RDS_USERNAME").expect("expected RDS_USERNAME environment variable");
+    let password =
+        std::env::var("RDS_PASSWORD").expect("expected RDS_PASSWORD environment variable");
+    let host = std::env::var("RDS_HOST").expect("expected RDS_HOST environment variable");
+    let port = std::env::var("RDS_PORT").expect("expected RDS_PORT environment variable");
+
+    let url = format!("mysql://{}:{}@{}:{}/slicer", username, password, host, port);
+    let pool = mysql::Pool::new(url.as_str()).unwrap();
+
     // Spawn and detach thread (slicelet) for retrieving assignments.
     thread::spawn(move || {
         run_slicelet();
@@ -315,8 +355,10 @@ fn main() {
         match stream {
             Ok(stream) => {
                 info!("client successfully connected");
+                let pool = pool.clone();
+                let task = task.clone();
                 thread::spawn(move || {
-                    handle_client(stream);
+                    handle_client(stream, pool, task);
                 });
             }
             Err(e) => {
