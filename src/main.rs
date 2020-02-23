@@ -49,7 +49,7 @@ lazy_static! {
         Arc::new(RwLock::new(HashMap::new()));
 }
 
-fn save_image(image: &Vec<u8>, name: &str) -> Result<(), io::Error> {
+fn save_image(image: &[u8], name: &str) -> Result<(), io::Error> {
     let mut pos = 0;
     let mut image_buffer = match File::create(name) {
         Ok(file) => file,
