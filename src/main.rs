@@ -159,7 +159,7 @@ fn handle_request(req: &Request) -> Result<Response, io::Error> {
     }
 }
 
-fn handle_client(stream: TcpStream, pool: Pool) {
+fn handle_client(stream: TcpStream, pool: Pool, task: String) {
     let mut reader = BufReader::new(&stream);
     let mut writer = BufWriter::new(&stream);
     let mut buffer = Vec::new();
@@ -192,10 +192,11 @@ fn handle_client(stream: TcpStream, pool: Pool) {
 
             // Spawn a thread to write request metadata to the database.
             let pool = pool.clone();
+            let task = task.clone();
             thread::spawn(move || {
                 let mut prep = pool.prepare(r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)").unwrap();
                 prep.execute(params!{
-                    "task" => "test task",
+                    "task" => task,
                     "expression" => request.expression as i32,
                 }).unwrap();
                 debug!("wrote request to database");
@@ -321,6 +322,13 @@ fn run_slicelet() {
 fn main() {
     simple_logger::init().unwrap();
 
+    let args: Vec<String> = env::args().collect();
+    if args.len() != 2 {
+        println!("usage: cargo run <task-name>");
+        process::exit(1);
+    }
+    let task: String = args[1].parse().unwrap();
+
     let username = std::env::var("RDS_USERNAME").expect("expected RDS_USERNAME environment variable");
     let password = std::env::var("RDS_PASSWORD").expect("expected RDS_PASSWORD environment variable");
     let host = std::env::var("RDS_HOST").expect("expected RDS_HOST environment variable");
@@ -341,8 +349,9 @@ fn main() {
             Ok(stream) => {
                 info!("client successfully connected");
                 let pool = pool.clone();
+                let task = task.clone();
                 thread::spawn(move || {
-                    handle_client(stream, pool);
+                    handle_client(stream, pool, task);
                 });
             }
             Err(e) => {
