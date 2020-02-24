@@ -47,6 +47,8 @@ lazy_static! {
     static ref ASSIGNMENTS_COUNTER: Arc<RwLock<Vec<Slice>>> = Arc::new(RwLock::new(Vec::new()));
     static ref MODEL_PROCS_COUNTER: Arc<RwLock<HashMap<Expression, Child>>> =
         Arc::new(RwLock::new(HashMap::new()));
+    static ref MODEL_CONNS_COUNTER: Arc<RwLock<HashMap<Expression, TcpStream>>> =
+        Arc::new(RwLock::new(HashMap::new()));
 }
 
 fn save_image(image: &[u8], name: &str) -> Result<(), io::Error> {
@@ -70,16 +72,41 @@ fn save_image(image: &[u8], name: &str) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn start_model(model_path: &str) -> Result<Child, io::Error> {
-    Command::new("python3")
+fn start_model(
+    model_path: &str,
+    expr: Expression,
+    model_procs: &mut HashMap<Expression, Child>,
+) -> Result<(), io::Error> {
+    let child = Command::new("python3")
         .arg(MODEL_SERVER_PATH)
         .arg(model_path)
         .arg(format!("{}", MODEL_SERVER_PORT))
         .spawn()
+        .unwrap();
+
+    // Sleep to ensure model process is ready.
+    thread::sleep(Duration::from_millis(8000));
+
+    let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
+    let mut conns = update_conns_counter.write().unwrap();
+
+    // Add model procs and establish connection.
+    model_procs.insert(expr.clone(), child);
+    match TcpStream::connect(format!("127.0.0.1:{}", MODEL_SERVER_PORT)) {
+        Ok(stream) => {
+            conns.insert(expr, stream);
+        }
+        Err(e) => {
+            return Err(e);
+        }
+    }
+
+    Ok(())
 }
 
-fn kill_model(model_proc: &mut Child) -> Result<(), io::Error> {
-    model_proc.kill()
+fn kill_model(expr: Expression, model_procs: &mut HashMap<Expression, Child>) {
+    let model_proc = model_procs.get_mut(&expr).unwrap();
+    model_proc.kill().unwrap();
 }
 
 fn expression_is_assigned(expr: &Expression) -> bool {
@@ -116,30 +143,25 @@ fn handle_request(req: &Request) -> Result<Response, io::Error> {
     }
 
     // Send prediction request to child proc and listen for result.
-    let prediction = match TcpStream::connect(format!("127.0.0.1:{}", MODEL_SERVER_PORT)) {
-        Ok(mut stream) => {
-            let mut cwd = env::current_dir().unwrap();
-            cwd.push(IMG_NAME);
-            let img_path = String::from(cwd.to_str().unwrap());
-            if let Err(e) = stream.write(img_path.as_bytes()) {
-                error!("failed to writing request to model server: {}", e);
-                return reject;
-            }
+    let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
+    let conns = update_conns_counter.read().unwrap();
+    let mut stream = conns.get(&req.expression).unwrap();
+    let mut cwd = env::current_dir().unwrap();
+    cwd.push(IMG_NAME);
+    let img_path = String::from(cwd.to_str().unwrap());
+    if let Err(e) = stream.write(img_path.as_bytes()) {
+        error!("failed to writing request to model server: {}", e);
+        return reject;
+    }
 
-            let mut buffer = [0 as u8; BUFFER_SIZE];
-            match stream.read(&mut buffer) {
-                Ok(_) => {
-                    let pred_str = String::from_utf8(vec![buffer.to_vec()[0]]).unwrap();
-                    pred_str.trim().parse::<u8>().unwrap()
-                }
-                Err(e) => {
-                    error!("failed reading from model server: {}", e);
-                    return reject;
-                }
-            }
+    let mut buffer = [0 as u8; BUFFER_SIZE];
+    let prediction = match stream.read(&mut buffer) {
+        Ok(_) => {
+            let pred_str = String::from_utf8(vec![buffer.to_vec()[0]]).unwrap();
+            pred_str.trim().parse::<u8>().unwrap()
         }
         Err(e) => {
-            error!("failed to connect to model server: {}", e);
+            error!("failed reading from model server: {}", e);
             return reject;
         }
     };
@@ -236,26 +258,19 @@ fn update_assignments(assigned: Vec<Slice>, unassigned: Vec<Slice>) {
 
 fn update_model(expr: &Expression, model_path: &str) -> Result<(), io::Error> {
     let anger_is_assigned = expression_is_assigned(expr);
-    let update_counter = Arc::clone(&MODEL_PROCS_COUNTER);
-    let mut model_procs = update_counter.write().unwrap();
+    let update_proc_counter = Arc::clone(&MODEL_PROCS_COUNTER);
+    let mut model_procs = update_proc_counter.write().unwrap();
 
     if anger_is_assigned && !model_procs.contains_key(expr) {
         trace!("starting {:?} inference model", expr);
-        let child = match start_model(&model_path) {
-            Ok(proc) => proc,
-            Err(e) => {
-                error!("failed to start {:?} model: {}", expr, e);
-                return Err(e);
-            }
-        };
-        model_procs.insert(expr.clone(), child);
-
-        // Sleep to ensure model process is ready.
-        thread::sleep(Duration::from_millis(8000));
+        if let Err(e) = start_model(&model_path, expr.clone(), &mut model_procs) {
+            error!("failed to start {:?} model: {}", expr, e);
+            return Err(e);
+        }
         trace!("started {:?} inference model", expr);
     } else if !anger_is_assigned && model_procs.contains_key(expr) {
         trace!("killing {:?} inference model", expr);
-        kill_model(model_procs.get_mut(expr).unwrap()).unwrap();
+        kill_model(expr.clone(), &mut model_procs);
         trace!("killed {:?} inference model", expr);
     }
 
