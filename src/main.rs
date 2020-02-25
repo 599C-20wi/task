@@ -94,6 +94,7 @@ fn start_model(
     model_procs.insert(expr.clone(), child);
     match TcpStream::connect(format!("127.0.0.1:{}", MODEL_SERVER_PORT)) {
         Ok(stream) => {
+            stream.set_nodelay(true).expect("set_nodelay call failed");
             conns.insert(expr, stream);
         }
         Err(e) => {
@@ -125,7 +126,7 @@ fn expression_is_assigned(expr: &Expression) -> bool {
 
 // Returns Accept message with inference result if req expression is assigned.
 // Return err if non-inference error occurs, a Reject message otherwise.
-fn handle_request(req: &Request) -> Result<Response, io::Error> {
+fn generate_response(req: &Request) -> Result<Response, io::Error> {
     let reject = Ok(Response::Reject {
         error_msg: String::from("not assigned to handle expression"),
         expression: req.expression.clone(),
@@ -181,9 +182,22 @@ fn handle_request(req: &Request) -> Result<Response, io::Error> {
     }
 }
 
+fn handle_request(stream: TcpStream, request: Request) {
+    let response = match generate_response(&request) {
+        Ok(resp) => resp,
+        Err(_) => {
+            return;
+        }
+    };
+
+    let serialized = response.serialize();
+    let mut writer = BufWriter::new(&stream);
+    writer.write_all(serialized.as_bytes()).unwrap();
+    writer.flush().unwrap();
+}
+
 fn handle_client(stream: TcpStream, pool: Pool, task: String) {
     let mut reader = BufReader::new(&stream);
-    let mut writer = BufWriter::new(&stream);
     let mut buffer = Vec::new();
     'read: while match reader.read_until(b'\n', &mut buffer) {
         Ok(size) => {
@@ -200,35 +214,32 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                 }
             };
 
-            let response = match handle_request(&request) {
-                Ok(resp) => resp,
-                Err(_) => {
-                    continue 'read;
-                }
-            };
-
-            let serialized = response.serialize();
-            writer.write_all(serialized.as_bytes()).unwrap();
-            writer.flush().unwrap();
-            buffer.clear();
-
             // Spawn a thread to write request metadata to the database.
-            let pool = pool.clone();
-            let task = task.clone();
+            let db_pool = pool.clone();
+            let db_task = task.clone();
+            let db_expr = request.expression.clone();
             thread::spawn(move || {
-                let mut prep = pool
+                let mut prep = db_pool
                     .prepare(
                         r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)",
                     )
                     .unwrap();
                 prep.execute(params! {
-                    "task" => task,
-                    "expression" => request.expression as i32,
-                })
-                .unwrap();
+                    "task" => db_task,
+                    "expression" => db_expr as i32,
+                    })
+                    .unwrap();
                 debug!("wrote request to database");
             });
 
+            // Spawn a thread to handle request.
+            let stream = stream.try_clone().unwrap();
+            thread::spawn(move || {
+                handle_request(stream, request);
+            });
+
+
+            buffer.clear();
             true
         }
         Err(error) => {
