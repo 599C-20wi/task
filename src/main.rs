@@ -192,7 +192,6 @@ fn send_response(stream: TcpStream, rx: Receiver<Response>) {
         info!("got response!");
         let serialized = response.serialize();
         writer.write_all(serialized.as_bytes()).unwrap();
-        writer.write(&[b'\n']).unwrap();
         writer.flush().unwrap();
     }
 }
