@@ -18,7 +18,7 @@ def start_server(model, port):
 	conn, addr = s.accept()
 
 	while True:
-		img_path = conn.recv(1024)
+		img_path = conn.recv(26)
 		if not img_path:
 		    break
 		img = image.load_img(img_path, target_size=(IMG_WIDTH, IMG_HEIGHT))
