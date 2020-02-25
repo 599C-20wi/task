@@ -15,8 +15,8 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process;
 use std::process::{Child, Command};
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, RwLock};
+use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
 use std::time::Duration;
 
@@ -190,12 +190,16 @@ fn send_response(stream: TcpStream, rx: Receiver<Response>) {
         let response = match rx.recv() {
             Ok(resp) => resp,
             Err(_) => {
-                return; // Client died
+                return; // client died
             }
         };
         let serialized = response.serialize();
-        writer.write_all(serialized.as_bytes()).unwrap();
-        writer.flush().unwrap();
+        if let Err(_) = writer.write_all(serialized.as_bytes()) {
+            return; // client died
+        }
+        if let Err(_) = writer.flush() {
+            return; // client died
+        }
     }
 }
 
@@ -247,10 +251,10 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                     )
                     .unwrap();
                 prep.execute(params! {
-                "task" => db_task,
-                "expression" => db_expr as i32,
-                })
-                .unwrap();
+                    "task" => db_task,
+                    "expression" => db_expr as i32,
+                    })
+                    .unwrap();
                 debug!("wrote request to database");
             });
 
