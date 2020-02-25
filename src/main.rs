@@ -15,8 +15,8 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process;
 use std::process::{Child, Command};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, RwLock};
-use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
 use std::time::Duration;
 
@@ -187,9 +187,12 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
 fn send_response(stream: TcpStream, rx: Receiver<Response>) {
     let mut writer = BufWriter::new(&stream);
     loop {
-        info!("waiting for response");
-        let response = rx.recv().unwrap();
-        info!("got response!");
+        let response = match rx.recv() {
+            Ok(resp) => resp,
+            Err(_) => {
+                return; // Client died
+            }
+        };
         let serialized = response.serialize();
         writer.write_all(serialized.as_bytes()).unwrap();
         writer.flush().unwrap();
@@ -203,9 +206,7 @@ fn handle_request(tx: SyncSender<Response>, request: Request) {
             return;
         }
     };
-    info!("sending response to the tx");
     tx.send(response).unwrap();
-    info!("by tx");
 }
 
 fn handle_client(stream: TcpStream, pool: Pool, task: String) {
@@ -246,10 +247,10 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                     )
                     .unwrap();
                 prep.execute(params! {
-                    "task" => db_task,
-                    "expression" => db_expr as i32,
-                    })
-                    .unwrap();
+                "task" => db_task,
+                "expression" => db_expr as i32,
+                })
+                .unwrap();
                 debug!("wrote request to database");
             });
 
