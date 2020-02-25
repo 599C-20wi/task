@@ -181,7 +181,7 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
     }
 }
 
-fn handle_request(stream: TcpStream, pool: Pool, request: Request, task: String) {
+fn handle_request(stream: TcpStream, request: Request) {
     let response = match generate_response(&request) {
         Ok(resp) => resp,
         Err(_) => {
@@ -193,23 +193,6 @@ fn handle_request(stream: TcpStream, pool: Pool, request: Request, task: String)
     let mut writer = BufWriter::new(&stream);
     writer.write_all(serialized.as_bytes()).unwrap();
     writer.flush().unwrap();
-
-    // Spawn a thread to write request metadata to the database.
-    let pool = pool.clone();
-    let task = task.clone();
-    thread::spawn(move || {
-        let mut prep = pool
-            .prepare(
-                r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)",
-            )
-            .unwrap();
-        prep.execute(params! {
-            "task" => task,
-            "expression" => request.expression as i32,
-            })
-            .unwrap();
-        debug!("wrote request to database");
-    });
 }
 
 fn handle_client(stream: TcpStream, pool: Pool, task: String) {
@@ -230,12 +213,30 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                 }
             };
 
-            // Spawn a thread to handle request.
+            // Create thread references.
             let stream = stream.try_clone().unwrap();
-            let pool = pool.clone();
-            let task = task.clone();
+            let db_pool = pool.clone();
+            let db_task = task.clone();
+            let db_expr = request.expression.clone();
+
+            // Spawn a thread to handle request.
             thread::spawn(move || {
-                handle_request(stream, pool, request, task);
+                handle_request(stream, request);
+            });
+
+            // Spawn a thread to write request metadata to the database.
+            thread::spawn(move || {
+                let mut prep = db_pool
+                    .prepare(
+                        r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)",
+                    )
+                    .unwrap();
+                prep.execute(params! {
+                    "task" => db_task,
+                    "expression" => db_expr as i32,
+                    })
+                    .unwrap();
+                debug!("wrote request to database");
             });
 
             buffer.clear();
