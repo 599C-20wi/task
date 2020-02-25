@@ -24,7 +24,7 @@ def start_server(model, port):
 		img_fname = conn.recv(1024)
 		if not img_fname:
 		    break
-		img = image.load_img(os.path.join(img_dir, img_fname), target_size=(IMG_WIDTH, IMG_HEIGHT))
+		img = image.load_img(os.path.join(img_dir, str(img_fname)), target_size=(IMG_WIDTH, IMG_HEIGHT))
 		img = image.img_to_array(img)
 		img = np.expand_dims(img, axis=0)
 		conn.sendall("{}".format(int(model.predict(img)[0][0])).encode('utf-8'))
