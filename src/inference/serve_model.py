@@ -4,6 +4,8 @@ import sys
 import tensorflow as tf
 
 from tensorflow.keras.preprocessing import image
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 IMG_HEIGHT = 350
 IMG_WIDTH = 350
