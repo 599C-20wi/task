@@ -127,7 +127,6 @@ fn expression_is_assigned(expr: &Expression) -> bool {
 // Returns Accept message with inference result if req expression is assigned.
 // Return err if non-inference error occurs, a Reject message otherwise.
 fn generate_response(req: &Request) -> Result<Response, io::Error> {
-    return Ok(Response::Accept{matches_expression: true});
     let reject = Ok(Response::Reject {
         error_msg: String::from("not assigned to handle expression"),
         expression: req.expression.clone(),
