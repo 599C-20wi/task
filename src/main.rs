@@ -132,7 +132,6 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
         error_msg: String::from("not assigned to handle expression"),
         expression: req.expression.clone(),
     });
-    return reject;
 
     if !expression_is_assigned(&req.expression) {
         trace!("not assigned to handle expression {:?}", &req.expression);
