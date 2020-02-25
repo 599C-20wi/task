@@ -15,8 +15,8 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process;
 use std::process::{Child, Command};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, RwLock};
-use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
 use std::time::Duration;
 
@@ -193,10 +193,10 @@ fn send_response(stream: TcpStream, rx: Receiver<Response>) {
             }
         };
         let serialized = response.serialize();
-        if let Err(_) = writer.write_all(serialized.as_bytes()) {
+        if writer.write_all(serialized.as_bytes()).is_err() {
             return; // client died
         }
-        if let Err(_) = writer.flush() {
+        if writer.flush().is_err() {
             return; // client died
         }
     }
@@ -209,7 +209,7 @@ fn handle_request(tx: SyncSender<Response>, request: Request) {
             return;
         }
     };
-    if let Err(_) = tx.send(response) {
+    if tx.send(response).is_err() {
         return; // client died
     }
 }
@@ -252,10 +252,10 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                     )
                     .unwrap();
                 prep.execute(params! {
-                    "task" => db_task,
-                    "expression" => db_expr as i32,
-                    })
-                    .unwrap();
+                "task" => db_task,
+                "expression" => db_expr as i32,
+                })
+                .unwrap();
                 debug!("wrote request to database");
             });
 
@@ -269,7 +269,7 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
             true
         }
         Err(error) => {
-            if let Err(_) = stream.shutdown(Shutdown::Both) {
+            if stream.shutdown(Shutdown::Both).is_err() {
                 return; // client died
             }
             error!("stream read failed: {}", error);
