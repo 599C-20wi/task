@@ -270,7 +270,9 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
             true
         }
         Err(error) => {
-            stream.shutdown(Shutdown::Both).unwrap();
+            if let Err(_) = stream.shutdown(Shutdown::Both) {
+                return; // client died
+            }
             error!("stream read failed: {}", error);
             false
         }
