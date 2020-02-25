@@ -223,6 +223,7 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
     'read: while match reader.read_until(b'\n', &mut buffer) {
         Ok(size) => {
             if size == 0 {
+                debug!("client disconnected");
                 break 'read;
             }
             trace!("stream read {} bytes", size);
