@@ -125,7 +125,7 @@ fn expression_is_assigned(expr: &Expression) -> bool {
 
 // Returns Accept message with inference result if req expression is assigned.
 // Return err if non-inference error occurs, a Reject message otherwise.
-fn handle_request(req: &Request) -> Result<Response, io::Error> {
+fn generate_response(req: &Request) -> Result<Response, io::Error> {
     let reject = Ok(Response::Reject {
         error_msg: String::from("not assigned to handle expression"),
         expression: req.expression.clone(),
@@ -181,9 +181,39 @@ fn handle_request(req: &Request) -> Result<Response, io::Error> {
     }
 }
 
+fn handle_request(stream: TcpStream, pool: Pool, request: Request, task: String) {
+    let response = match generate_response(&request) {
+        Ok(resp) => resp,
+        Err(_) => {
+            return;
+        }
+    };
+
+    let serialized = response.serialize();
+    let mut writer = BufWriter::new(&stream);
+    writer.write_all(serialized.as_bytes()).unwrap();
+    writer.flush().unwrap();
+
+    // Spawn a thread to write request metadata to the database.
+    let pool = pool.clone();
+    let task = task.clone();
+    thread::spawn(move || {
+        let mut prep = pool
+            .prepare(
+                r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)",
+            )
+            .unwrap();
+        prep.execute(params! {
+            "task" => task,
+            "expression" => request.expression as i32,
+            })
+            .unwrap();
+        debug!("wrote request to database");
+    });
+}
+
 fn handle_client(stream: TcpStream, pool: Pool, task: String) {
     let mut reader = BufReader::new(&stream);
-    let mut writer = BufWriter::new(&stream);
     let mut buffer = Vec::new();
     'read: while match reader.read_until(b'\n', &mut buffer) {
         Ok(size) => {
@@ -200,35 +230,15 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                 }
             };
 
-            let response = match handle_request(&request) {
-                Ok(resp) => resp,
-                Err(_) => {
-                    continue 'read;
-                }
-            };
-
-            let serialized = response.serialize();
-            writer.write_all(serialized.as_bytes()).unwrap();
-            writer.flush().unwrap();
-            buffer.clear();
-
-            // Spawn a thread to write request metadata to the database.
+            // Spawn a thread to handle request.
+            let stream = stream.try_clone().unwrap();
             let pool = pool.clone();
             let task = task.clone();
             thread::spawn(move || {
-                let mut prep = pool
-                    .prepare(
-                        r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)",
-                    )
-                    .unwrap();
-                prep.execute(params! {
-                    "task" => task,
-                    "expression" => request.expression as i32,
-                })
-                .unwrap();
-                debug!("wrote request to database");
+                handle_request(stream, pool, request, task);
             });
 
+            buffer.clear();
             true
         }
         Err(error) => {
