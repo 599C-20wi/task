@@ -210,7 +210,9 @@ fn handle_request(tx: SyncSender<Response>, request: Request) {
             return;
         }
     };
-    tx.send(response).unwrap();
+    if let Err(_) = tx.send(response) {
+        return; // client died
+    }
 }
 
 fn handle_client(stream: TcpStream, pool: Pool, task: String) {
