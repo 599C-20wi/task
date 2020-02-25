@@ -213,18 +213,10 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                 }
             };
 
-            // Create thread references.
-            let stream = stream.try_clone().unwrap();
+            // Spawn a thread to write request metadata to the database.
             let db_pool = pool.clone();
             let db_task = task.clone();
             let db_expr = request.expression.clone();
-
-            // Spawn a thread to handle request.
-            thread::spawn(move || {
-                handle_request(stream, request);
-            });
-
-            // Spawn a thread to write request metadata to the database.
             thread::spawn(move || {
                 let mut prep = db_pool
                     .prepare(
@@ -238,6 +230,13 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                     .unwrap();
                 debug!("wrote request to database");
             });
+
+            // Spawn a thread to handle request.
+            let stream = stream.try_clone().unwrap();
+            thread::spawn(move || {
+                handle_request(stream, request);
+            });
+
 
             buffer.clear();
             true

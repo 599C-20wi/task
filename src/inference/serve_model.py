@@ -2,6 +2,7 @@ import numpy as np
 import socket
 import sys
 import tensorflow as tf
+import os.path
 
 from tensorflow.keras.preprocessing import image
 
@@ -17,11 +18,13 @@ def start_server(model, port):
 	s.listen(1)
 	conn, addr = s.accept()
 
+	img_dir = os.path.dirname(os.path.abspath(__file__))
+
 	while True:
-		img_path = conn.recv(1024)
-		if not img_path:
+		img_fname = conn.recv(1024)
+		if not img_fname:
 		    break
-		img = image.load_img(img_path, target_size=(IMG_WIDTH, IMG_HEIGHT))
+		img = image.load_img(os.path.join(img_dir, img_fname), target_size=(IMG_WIDTH, IMG_HEIGHT))
 		img = image.img_to_array(img)
 		img = np.expand_dims(img, axis=0)
 		conn.sendall("{}".format(int(model.predict(img)[0][0])).encode('utf-8'))
