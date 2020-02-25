@@ -16,7 +16,7 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process;
 use std::process::{Child, Command};
 use std::sync::{Arc, RwLock};
-use std::sync::mpsc::{channel, Sender, Receiver};
+use std::sync::mpsc::{sync_channel, SyncSender, Receiver};
 use std::thread;
 use std::time::Duration;
 
@@ -195,7 +195,7 @@ fn send_response(stream: TcpStream, rx: Receiver<Response>) {
     }
 }
 
-fn handle_request(tx: Sender<Response>, request: Request) {
+fn handle_request(tx: SyncSender<Response>, request: Request) {
     let response = match generate_response(&request) {
         Ok(resp) => resp,
         Err(_) => {
@@ -208,7 +208,7 @@ fn handle_request(tx: Sender<Response>, request: Request) {
 fn handle_client(stream: TcpStream, pool: Pool, task: String) {
     let mut reader = BufReader::new(&stream);
     let mut buffer = Vec::new();
-    let (tx, rx) = channel::<Response>();
+    let (tx, rx) = sync_channel::<Response>(0);
 
     // Spawn thread to send responses to client.
     let resp_stream = stream.try_clone().unwrap();
