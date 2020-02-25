@@ -16,6 +16,7 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process;
 use std::process::{Child, Command};
 use std::sync::{Arc, RwLock};
+use std::sync::mpsc::{channel, Sender, Receiver};
 use std::thread;
 use std::time::Duration;
 
@@ -131,6 +132,7 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
         error_msg: String::from("not assigned to handle expression"),
         expression: req.expression.clone(),
     });
+    return reject;
 
     if !expression_is_assigned(&req.expression) {
         trace!("not assigned to handle expression {:?}", &req.expression);
@@ -182,23 +184,37 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
     }
 }
 
-fn handle_request(stream: TcpStream, request: Request) {
+fn send_response(stream: TcpStream, rx: Receiver<Response>) {
+    let mut writer = BufWriter::new(&stream);
+    loop {
+        let response = rx.recv().unwrap();
+        let serialized = response.serialize();
+        writer.write_all(serialized.as_bytes()).unwrap();
+        writer.flush().unwrap();
+    }
+}
+
+fn handle_request(tx: Sender<Response>, request: Request) {
     let response = match generate_response(&request) {
         Ok(resp) => resp,
         Err(_) => {
             return;
         }
     };
-
-    let serialized = response.serialize();
-    let mut writer = BufWriter::new(&stream);
-    writer.write_all(serialized.as_bytes()).unwrap();
-    writer.flush().unwrap();
+    tx.send(response).unwrap();
 }
 
 fn handle_client(stream: TcpStream, pool: Pool, task: String) {
     let mut reader = BufReader::new(&stream);
     let mut buffer = Vec::new();
+    let (tx, rx) = channel::<Response>();
+
+    // Spawn thread to send responses to client.
+    let resp_stream = stream.try_clone().unwrap();
+    thread::spawn(move || {
+        send_response(resp_stream, rx);
+    });
+
     'read: while match reader.read_until(b'\n', &mut buffer) {
         Ok(size) => {
             if size == 0 {
@@ -233,9 +249,9 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
             });
 
             // Spawn a thread to handle request.
-            let stream = stream.try_clone().unwrap();
+            let tx = tx.clone();
             thread::spawn(move || {
-                handle_request(stream, request);
+                handle_request(tx, request);
             });
 
 
