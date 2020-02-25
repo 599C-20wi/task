@@ -187,7 +187,9 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
 fn send_response(stream: TcpStream, rx: Receiver<Response>) {
     let mut writer = BufWriter::new(&stream);
     loop {
+        info!("waiting for response");
         let response = rx.recv().unwrap();
+        info!("got response!");
         let serialized = response.serialize();
         writer.write_all(serialized.as_bytes()).unwrap();
         writer.write(&[b'\n']).unwrap();
@@ -202,7 +204,9 @@ fn handle_request(tx: SyncSender<Response>, request: Request) {
             return;
         }
     };
+    info!("sending response to the tx");
     tx.send(response).unwrap();
+    info!("by tx");
 }
 
 fn handle_client(stream: TcpStream, pool: Pool, task: String) {
@@ -250,11 +254,10 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
             });
 
             // Spawn a thread to handle request.
-            let tx = tx.clone();
+            let thread_tx = tx.clone();
             thread::spawn(move || {
-                handle_request(tx, request);
+                handle_request(thread_tx, request);
             });
-
 
             buffer.clear();
             true
