@@ -94,6 +94,7 @@ fn start_model(
     model_procs.insert(expr.clone(), child);
     match TcpStream::connect(format!("127.0.0.1:{}", MODEL_SERVER_PORT)) {
         Ok(stream) => {
+            stream.set_nodelay(true).expect("set_nodelay call failed");
             conns.insert(expr, stream);
         }
         Err(e) => {
@@ -126,7 +127,7 @@ fn expression_is_assigned(expr: &Expression) -> bool {
 // Returns Accept message with inference result if req expression is assigned.
 // Return err if non-inference error occurs, a Reject message otherwise.
 fn generate_response(req: &Request) -> Result<Response, io::Error> {
-    return Response::Accept{matches_expression: true};
+    return Ok(Response::Accept{matches_expression: true});
     let reject = Ok(Response::Reject {
         error_msg: String::from("not assigned to handle expression"),
         expression: req.expression.clone(),
