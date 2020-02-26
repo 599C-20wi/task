@@ -133,7 +133,6 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
         expression: req.expression.clone(),
     });
 
-    return Ok(Response::Accept{matches_expression: true});
     if !expression_is_assigned(&req.expression) {
         trace!("not assigned to handle expression {:?}", &req.expression);
         return reject;
@@ -145,6 +144,7 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
     //    return Err(e);
     // }
 
+    let now = std::time::Instant::now();
     // Send prediction request to child proc and listen for result.
     let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
     let conns = update_conns_counter.read().unwrap();
@@ -160,6 +160,7 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
     let mut buffer = [0 as u8; BUFFER_SIZE];
     let prediction = match stream.read(&mut buffer) {
         Ok(_) => {
+            println!("{}", now.elapsed().as_secs());
             let pred_str = String::from_utf8(vec![buffer.to_vec()[0]]).unwrap();
             pred_str.trim().parse::<u8>().unwrap()
         }
