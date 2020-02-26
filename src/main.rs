@@ -191,17 +191,17 @@ fn send_response(stream: TcpStream, rx: Receiver<Response>) {
         let response = match rx.recv() {
             Ok(resp) => resp,
             Err(_) => {
-                info!("response thread disconnected from client");
+                // info!("response thread disconnected from client");
                 return; // client died
             }
         };
         let serialized = response.serialize();
         if writer.write_all(serialized.as_bytes()).is_err() {
-            info!("response thread disconnected from client");
+            // info!("response thread disconnected from client");
             return; // client died
         }
         if writer.flush().is_err() {
-            info!("response thread disconnected from client");
+            // info!("response thread disconnected from client");
             return; // client died
         }
     }
@@ -215,7 +215,7 @@ fn handle_request(tx: SyncSender<Response>, request: Request) {
         }
     };
     if tx.send(response).is_err() {
-        info!("handle request thread disconnected from client");
+        // info!("handle request thread disconnected from client");
         return; // client died
     }
 }
@@ -234,15 +234,15 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
     'read: while match reader.read_until(b'\n', &mut buffer) {
         Ok(size) => {
             if size == 0 {
-                debug!("client disconnected");
+                // debug!("client disconnected");
                 break 'read;
             }
-            trace!("stream read {} bytes", size);
+            // trace!("stream read {} bytes", size);
 
             let request = match Request::deserialize(&buffer[..size]) {
                 Ok(message) => message,
                 Err(e) => {
-                    error!("deserialization failed: {}", e);
+                    // error!("deserialization failed: {}", e);
                     continue 'read;
                 }
             };
@@ -262,7 +262,7 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                 "expression" => db_expr as i32,
                 })
                 .unwrap();
-                debug!("wrote request to database");
+                // debug!("wrote request to database");
             });
 
             // Spawn a thread to handle request.
@@ -294,13 +294,13 @@ fn update_assignments(assigned: Vec<Slice>, unassigned: Vec<Slice>) {
 
     for slice in &assigned {
         assignments.push(*slice);
-        trace!("assigning slice from {} to {}", slice.start, slice.end);
+        // trace!("assigning slice from {} to {}", slice.start, slice.end);
     }
 
     for slice in &unassigned {
         let idx = assignments.binary_search(slice).unwrap();
         assignments.remove(idx);
-        trace!("unassigning slice from {} to {}", slice.start, slice.end);
+        // trace!("unassigning slice from {} to {}", slice.start, slice.end);
     }
 }
 
@@ -346,7 +346,7 @@ fn run_slicelet() {
     for stream in listener.incoming() {
         match stream {
             Ok(stream) => {
-                info!("assigner successfully connected");
+                // info!("assigner successfully connected");
 
                 let mut reader = BufReader::new(&stream);
                 let mut buffer = Vec::new();
@@ -355,7 +355,7 @@ fn run_slicelet() {
                         if size == 0 {
                             break 'read;
                         }
-                        trace!("stream read {} bytes", size);
+                        // trace!("stream read {} bytes", size);
 
                         let update = match Update::deserialize(&buffer[..size]) {
                             Ok(message) => message,
