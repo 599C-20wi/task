@@ -14,3 +14,4 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 assigner = { git = "https://github.com/599C-20wi/assigner" }
 mysql =  "17.0.0"
+threadpool = "1.7.1"

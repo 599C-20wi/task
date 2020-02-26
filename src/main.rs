@@ -20,6 +20,7 @@ use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
 
+use threadpool::ThreadPool;
 use mysql::Pool;
 
 use crate::face::Expression;
@@ -231,6 +232,8 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
         send_response(resp_stream, rx);
     });
 
+    let workers = ThreadPool::with_name("worker".into(), 4);
+
     'read: while match reader.read_until(b'\n', &mut buffer) {
         Ok(size) => {
             if size == 0 {
@@ -267,7 +270,11 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
 
             // Spawn a thread to handle request.
             let thread_tx = tx.clone();
-            thread::spawn(move || {
+            // thread::spawn(move || {
+            //    handle_request(thread_tx, request);
+            //});
+
+            workers.execute(|| {
                 handle_request(thread_tx, request);
             });
 
@@ -285,6 +292,7 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
             false
         }
     } {}
+    workers.join()
 }
 
 // Update local slice assignments. Assumes that assigner handle coalescing.
