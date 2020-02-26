@@ -145,7 +145,7 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
     //    return Err(e);
     // }
 
-    let now = std::time::Instant::now();
+    // let now = std::time::Instant::now();
     // Send prediction request to child proc and listen for result.
     let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
     let conns = update_conns_counter.read().unwrap();
@@ -161,7 +161,7 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
     let mut buffer = [0 as u8; BUFFER_SIZE];
     let prediction = match stream.read(&mut buffer) {
         Ok(_) => {
-            println!("{}", now.elapsed().as_secs());
+            // println!("{}", now.elapsed().as_secs());
             let pred_str = String::from_utf8(vec![buffer.to_vec()[0]]).unwrap();
             pred_str.trim().parse::<u8>().unwrap()
         }
@@ -189,6 +189,7 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
 fn send_response(stream: TcpStream, rx: Receiver<Response>) {
     let mut writer = BufWriter::new(&stream);
     loop {
+        let send_time = std::time::Instant::now(); 
         let response = match rx.recv() {
             Ok(resp) => resp,
             Err(_) => {
@@ -205,16 +206,21 @@ fn send_response(stream: TcpStream, rx: Receiver<Response>) {
             // info!("response thread disconnected from client");
             return; // client died
         }
+        
+        println!("send resp: {}", send_time.elapsed().as_millis());
     }
 }
 
 fn handle_request(tx: SyncSender<Response>, request: Request) {
+    let resp_time = std::time::Instant::now();
     let response = match generate_response(&request) {
         Ok(resp) => resp,
         Err(_) => {
             return;
         }
     };
+    println!("gen resp: {}", resp_time.elapsed().as_millis());
+
     if tx.send(response).is_err() {
         // info!("handle request thread disconnected from client");
         return; // client died
