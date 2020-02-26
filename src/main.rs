@@ -189,14 +189,17 @@ fn send_response(stream: TcpStream, rx: Receiver<Response>) {
         let response = match rx.recv() {
             Ok(resp) => resp,
             Err(_) => {
+                info!("response thread disconnected from client");
                 return; // client died
             }
         };
         let serialized = response.serialize();
         if writer.write_all(serialized.as_bytes()).is_err() {
+            info!("response thread disconnected from client");
             return; // client died
         }
         if writer.flush().is_err() {
+            info!("response thread disconnected from client");
             return; // client died
         }
     }
@@ -210,6 +213,7 @@ fn handle_request(tx: SyncSender<Response>, request: Request) {
         }
     };
     if tx.send(response).is_err() {
+        info!("handle request thread disconnected from client");
         return; // client died
     }
 }
@@ -268,11 +272,14 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
             buffer.clear();
             true
         }
-        Err(error) => {
-            if stream.shutdown(Shutdown::Both).is_err() {
-                return; // client died
+        Err(read_error) => {
+            if let Err(shutdown_error) = stream.shutdown(Shutdown::Both) {
+                error!(
+                    "could not shutdown from client, got error: {}",
+                    shutdown_error
+                );
             }
-            error!("stream read failed: {}", error);
+            error!("stream read failed: {}", read_error);
             false
         }
     } {}
