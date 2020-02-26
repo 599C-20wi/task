@@ -21,10 +21,9 @@ def start_server(model, port):
 
     while True:
         img_path = conn.recv(26)
-        print(img_path)
         if not img_path:
             break
-        img = image.load_img(r'/home/ubuntu/task/face.jpg', target_size=(IMG_WIDTH, IMG_HEIGHT))
+        img = image.load_img(img_path.decode('utf-8'), target_size=(IMG_WIDTH, IMG_HEIGHT))
         img = image.img_to_array(img)
         img = np.expand_dims(img, axis=0)
         conn.sendall("{}".format(int(model.predict(img)[0][0])).encode('utf-8'))
