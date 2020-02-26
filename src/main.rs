@@ -9,9 +9,11 @@ extern crate mysql;
 
 use std::collections::HashMap;
 use std::env;
+use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::iter;
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process;
 use std::process::{Child, Command};
@@ -19,14 +21,12 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
-use std::iter;
-use std::fs;
 
-use rand::{Rng, thread_rng};
 use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 
-use threadpool::ThreadPool;
 use mysql::Pool;
+use threadpool::ThreadPool;
 
 use crate::face::Expression;
 use crate::message::{Request, Response};
@@ -80,7 +80,7 @@ fn save_image(image: &[u8], name: &str) -> Result<(), io::Error> {
 
 fn delete_image(name: &str) {
     if let Err(e) = fs::remove_file(name) {
-        error!("could not remove file {}: {}", name, e); 
+        error!("could not remove file {}: {}", name, e);
     }
 }
 
