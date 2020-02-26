@@ -139,10 +139,10 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
     }
 
     // Save the image to be processed by the model server.
-    if let Err(e) = save_image(&req.image, IMG_NAME) {
-        error!("save image failed: {}", e);
-        return Err(e);
-    }
+    // if let Err(e) = save_image(&req.image, IMG_NAME) {
+    //    error!("save image failed: {}", e);
+    //    return Err(e);
+    // }
 
     // Send prediction request to child proc and listen for result.
     let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
