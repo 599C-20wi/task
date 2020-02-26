@@ -15,6 +15,7 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process;
 use std::process::{Child, Command};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
@@ -182,26 +183,56 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
     }
 }
 
-fn handle_request(stream: TcpStream, request: Request) {
+fn send_response(stream: TcpStream, rx: Receiver<Response>) {
+    let mut writer = BufWriter::new(&stream);
+    loop {
+        let response = match rx.recv() {
+            Ok(resp) => resp,
+            Err(_) => {
+                info!("response thread disconnected from client");
+                return; // client died
+            }
+        };
+        let serialized = response.serialize();
+        if writer.write_all(serialized.as_bytes()).is_err() {
+            info!("response thread disconnected from client");
+            return; // client died
+        }
+        if writer.flush().is_err() {
+            info!("response thread disconnected from client");
+            return; // client died
+        }
+    }
+}
+
+fn handle_request(tx: SyncSender<Response>, request: Request) {
     let response = match generate_response(&request) {
         Ok(resp) => resp,
         Err(_) => {
             return;
         }
     };
-
-    let serialized = response.serialize();
-    let mut writer = BufWriter::new(&stream);
-    writer.write_all(serialized.as_bytes()).unwrap();
-    writer.flush().unwrap();
+    if tx.send(response).is_err() {
+        info!("handle request thread disconnected from client");
+        return; // client died
+    }
 }
 
 fn handle_client(stream: TcpStream, pool: Pool, task: String) {
     let mut reader = BufReader::new(&stream);
     let mut buffer = Vec::new();
+    let (tx, rx) = sync_channel::<Response>(0);
+
+    // Spawn thread to send responses to client.
+    let resp_stream = stream.try_clone().unwrap();
+    thread::spawn(move || {
+        send_response(resp_stream, rx);
+    });
+
     'read: while match reader.read_until(b'\n', &mut buffer) {
         Ok(size) => {
             if size == 0 {
+                debug!("client disconnected");
                 break 'read;
             }
             trace!("stream read {} bytes", size);
@@ -225,26 +256,30 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                     )
                     .unwrap();
                 prep.execute(params! {
-                    "task" => db_task,
-                    "expression" => db_expr as i32,
-                    })
-                    .unwrap();
+                "task" => db_task,
+                "expression" => db_expr as i32,
+                })
+                .unwrap();
                 debug!("wrote request to database");
             });
 
             // Spawn a thread to handle request.
-            let stream = stream.try_clone().unwrap();
+            let thread_tx = tx.clone();
             thread::spawn(move || {
-                handle_request(stream, request);
+                handle_request(thread_tx, request);
             });
-
 
             buffer.clear();
             true
         }
-        Err(error) => {
-            stream.shutdown(Shutdown::Both).unwrap();
-            error!("stream read failed: {}", error);
+        Err(read_error) => {
+            if let Err(shutdown_error) = stream.shutdown(Shutdown::Both) {
+                error!(
+                    "could not shutdown from client, got error: {}",
+                    shutdown_error
+                );
+            }
+            error!("stream read failed: {}", read_error);
             false
         }
     } {}
