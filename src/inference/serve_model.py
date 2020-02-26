@@ -17,7 +17,7 @@ def start_server(model, port):
 	s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 	s.bind(('127.0.0.1', port))
 	s.listen(1)
-	s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+	# s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
 	conn, addr = s.accept()
 
 	while True:

@@ -96,7 +96,7 @@ fn start_model(
     model_procs.insert(expr.clone(), child);
     match TcpStream::connect(format!("127.0.0.1:{}", MODEL_SERVER_PORT)) {
         Ok(stream) => {
-            stream.set_nodelay(true).expect("set_nodelay call failed");
+            stream.set_nodelay(false).expect("set_nodelay call failed");
             conns.insert(expr, stream);
         }
         Err(e) => {
