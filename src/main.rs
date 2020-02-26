@@ -16,7 +16,7 @@ use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process;
 use std::process::{Child, Command};
 use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
-use std::sync::{Arc, RwLock};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 use std::iter;
@@ -53,8 +53,8 @@ lazy_static! {
     static ref ASSIGNMENTS_COUNTER: Arc<RwLock<Vec<Slice>>> = Arc::new(RwLock::new(Vec::new()));
     static ref MODEL_PROCS_COUNTER: Arc<RwLock<HashMap<Expression, Child>>> =
         Arc::new(RwLock::new(HashMap::new()));
-    static ref MODEL_CONNS_COUNTER: Arc<RwLock<HashMap<Expression, TcpStream>>> =
-        Arc::new(RwLock::new(HashMap::new()));
+    static ref MODEL_CONNS_COUNTER: Arc<Mutex<HashMap<Expression, TcpStream>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 }
 
 fn save_image(image: &[u8], name: &str) -> Result<(), io::Error> {
@@ -100,7 +100,7 @@ fn start_model(
     thread::sleep(Duration::from_millis(8000));
 
     let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
-    let mut conns = update_conns_counter.write().unwrap();
+    let mut conns = update_conns_counter.lock().unwrap();
 
     // Add model procs and establish connection.
     model_procs.insert(expr.clone(), child);
@@ -167,7 +167,7 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
 
     // Send prediction request to child proc and listen for result.
     let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
-    let conns = update_conns_counter.read().unwrap();
+    let conns = update_conns_counter.lock().unwrap();
     let mut stream = conns.get(&req.expression).unwrap();
     let mut cwd = env::current_dir().unwrap();
     cwd.push(&img_name);

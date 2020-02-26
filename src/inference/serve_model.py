@@ -21,7 +21,8 @@ def start_server(model, port):
 
 	while True:
 		img_path = conn.recv(26)
-		if not img_path:
+        print(img_path)
+        if not img_path:
 		    break
 		img = image.load_img(r'/home/ubuntu/task/face.jpg', target_size=(IMG_WIDTH, IMG_HEIGHT))
 		img = image.img_to_array(img)
