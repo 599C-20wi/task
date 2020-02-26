@@ -19,6 +19,11 @@ use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 use std::time::Duration;
+use std::iter;
+use std::fs;
+
+use rand::{Rng, thread_rng};
+use rand::distributions::Alphanumeric;
 
 use threadpool::ThreadPool;
 use mysql::Pool;
@@ -39,7 +44,6 @@ const MODEL_SERVER_PORT: u16 = 4334;
 const ANGER_MODEL_PATH: &str = "src/inference/models/anger_model.h5";
 const HAPPINESS_MODEL_PATH: &str = "src/inference/models/happiness_model.h5";
 
-const IMG_NAME: &str = "face.jpg";
 const BUFFER_SIZE: usize = 16;
 
 const CLIENT_PORT: u16 = 3333;
@@ -72,6 +76,12 @@ fn save_image(image: &[u8], name: &str) -> Result<(), io::Error> {
         pos += bytes_written;
     }
     Ok(())
+}
+
+fn delete_image(name: &str) {
+    if let Err(e) = fs::remove_file(name) {
+        error!("could not remove file {}: {}", name, e); 
+    }
 }
 
 fn start_model(
@@ -126,6 +136,15 @@ fn expression_is_assigned(expr: &Expression) -> bool {
     false
 }
 
+// Create a random filename that is 4 characters in length.
+fn rand_fname() -> String {
+    let mut rng = thread_rng();
+    iter::repeat(())
+        .map(|()| rng.sample(Alphanumeric))
+        .take(4)
+        .collect()
+}
+
 // Returns Accept message with inference result if req expression is assigned.
 // Return err if non-inference error occurs, a Reject message otherwise.
 fn generate_response(req: &Request) -> Result<Response, io::Error> {
@@ -140,17 +159,18 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
     }
 
     // Save the image to be processed by the model server.
-    // if let Err(e) = save_image(&req.image, IMG_NAME) {
-    //    error!("save image failed: {}", e);
-    //    return Err(e);
-    // }
+    let img_name = format!("{}.jpg", rand_fname());
+    if let Err(e) = save_image(&req.image, &img_name) {
+        error!("save image failed: {}", e);
+        return Err(e);
+    }
 
     // Send prediction request to child proc and listen for result.
     let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
     let conns = update_conns_counter.read().unwrap();
     let mut stream = conns.get(&req.expression).unwrap();
     let mut cwd = env::current_dir().unwrap();
-    cwd.push(IMG_NAME);
+    cwd.push(&img_name);
     let img_path = String::from(cwd.to_str().unwrap());
     if let Err(e) = stream.write(img_path.as_bytes()) {
         error!("failed to writing request to model server: {}", e);
@@ -168,6 +188,7 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
             return reject;
         }
     };
+    delete_image(&img_name);
 
     // Create and return prediction response.
     match prediction {
