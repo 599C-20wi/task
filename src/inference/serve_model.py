@@ -30,6 +30,7 @@ def start_server(model, port):
 
     while True:
         conn, addr = s.accept()
+        print("NEW CONNECTION");
         thread = threading.Thread(target=handle_request, args=(conn,))
         thread.start()
 
