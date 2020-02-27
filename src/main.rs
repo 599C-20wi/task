@@ -252,7 +252,7 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
         send_response(resp_stream, rx);
     });
 
-    let workers = ThreadPool::with_name("worker".into(), 4);
+    let workers = ThreadPool::new(4);
     'read: while match reader.read_until(b'\n', &mut buffer) {
         Ok(size) => {
             if size == 0 {
