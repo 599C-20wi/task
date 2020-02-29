@@ -273,6 +273,7 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
             let db_pool = pool.clone();
             let db_task = task.clone();
             let db_expr = request.expression.clone();
+            let slice_key = hash::to_slice_key(&db_expr);
             thread::spawn(move || {
                 let mut prep = db_pool
                     .prepare(
@@ -280,8 +281,8 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                     )
                     .unwrap();
                 prep.execute(params! {
-                "task" => db_task,
-                "expression" => db_expr as i32,
+                    "task" => db_task,
+                    "slice_key" => slice_key,
                 })
                 .unwrap();
                 debug!("wrote request to database");
