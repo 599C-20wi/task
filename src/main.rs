@@ -9,17 +9,24 @@ extern crate mysql;
 
 use std::collections::HashMap;
 use std::env;
+use std::fs;
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader, BufWriter, Read, Write};
+use std::iter;
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::process;
 use std::process::{Child, Command};
-use std::sync::{Arc, RwLock};
+use std::sync::mpsc::{sync_channel, Receiver, SyncSender};
+use std::sync::{Arc, Mutex, RwLock};
 use std::thread;
 use std::time::Duration;
 
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
+
 use mysql::Pool;
+use threadpool::ThreadPool;
 
 use crate::face::Expression;
 use crate::message::{Request, Response};
@@ -37,7 +44,6 @@ const MODEL_SERVER_PORT: u16 = 4334;
 const ANGER_MODEL_PATH: &str = "src/inference/models/anger_model.h5";
 const HAPPINESS_MODEL_PATH: &str = "src/inference/models/happiness_model.h5";
 
-const IMG_NAME: &str = "face.jpg";
 const BUFFER_SIZE: usize = 16;
 
 const CLIENT_PORT: u16 = 3333;
@@ -47,6 +53,8 @@ lazy_static! {
     static ref ASSIGNMENTS_COUNTER: Arc<RwLock<Vec<Slice>>> = Arc::new(RwLock::new(Vec::new()));
     static ref MODEL_PROCS_COUNTER: Arc<RwLock<HashMap<Expression, Child>>> =
         Arc::new(RwLock::new(HashMap::new()));
+    static ref MODEL_CONNS_COUNTER: Arc<Mutex<HashMap<Expression, TcpStream>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 }
 
 fn save_image(image: &[u8], name: &str) -> Result<(), io::Error> {
@@ -70,16 +78,48 @@ fn save_image(image: &[u8], name: &str) -> Result<(), io::Error> {
     Ok(())
 }
 
-fn start_model(model_path: &str) -> Result<Child, io::Error> {
-    Command::new("python3")
+fn delete_image(name: &str) {
+    if let Err(e) = fs::remove_file(name) {
+        error!("could not remove file {}: {}", name, e);
+    }
+}
+
+fn start_model(
+    model_path: &str,
+    expr: Expression,
+    model_procs: &mut HashMap<Expression, Child>,
+) -> Result<(), io::Error> {
+    let child = Command::new("python3")
         .arg(MODEL_SERVER_PATH)
         .arg(model_path)
         .arg(format!("{}", MODEL_SERVER_PORT))
         .spawn()
+        .unwrap();
+
+    // Sleep to ensure model process is ready.
+    thread::sleep(Duration::from_millis(8000));
+
+    let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
+    let mut conns = update_conns_counter.lock().unwrap();
+
+    // Add model procs and establish connection.
+    model_procs.insert(expr.clone(), child);
+    match TcpStream::connect(format!("127.0.0.1:{}", MODEL_SERVER_PORT)) {
+        Ok(stream) => {
+            stream.set_nodelay(true).expect("set_nodelay call failed");
+            conns.insert(expr, stream);
+        }
+        Err(e) => {
+            return Err(e);
+        }
+    }
+
+    Ok(())
 }
 
-fn kill_model(model_proc: &mut Child) -> Result<(), io::Error> {
-    model_proc.kill()
+fn kill_model(expr: Expression, model_procs: &mut HashMap<Expression, Child>) {
+    let model_proc = model_procs.get_mut(&expr).unwrap();
+    model_proc.kill().unwrap();
 }
 
 fn expression_is_assigned(expr: &Expression) -> bool {
@@ -96,9 +136,18 @@ fn expression_is_assigned(expr: &Expression) -> bool {
     false
 }
 
+// Create a random filename that is 4 characters in length.
+fn rand_fname() -> String {
+    let mut rng = thread_rng();
+    iter::repeat(())
+        .map(|()| rng.sample(Alphanumeric))
+        .take(4)
+        .collect()
+}
+
 // Returns Accept message with inference result if req expression is assigned.
 // Return err if non-inference error occurs, a Reject message otherwise.
-fn handle_request(req: &Request) -> Result<Response, io::Error> {
+fn generate_response(req: &Request) -> Result<Response, io::Error> {
     let reject = Ok(Response::Reject {
         error_msg: String::from("not assigned to handle expression"),
         expression: req.expression.clone(),
@@ -110,39 +159,36 @@ fn handle_request(req: &Request) -> Result<Response, io::Error> {
     }
 
     // Save the image to be processed by the model server.
-    if let Err(e) = save_image(&req.image, IMG_NAME) {
+    let img_name = format!("{}.jpg", rand_fname());
+    if let Err(e) = save_image(&req.image, &img_name) {
         error!("save image failed: {}", e);
         return Err(e);
     }
 
     // Send prediction request to child proc and listen for result.
-    let prediction = match TcpStream::connect(format!("127.0.0.1:{}", MODEL_SERVER_PORT)) {
-        Ok(mut stream) => {
-            let mut cwd = env::current_dir().unwrap();
-            cwd.push(IMG_NAME);
-            let img_path = String::from(cwd.to_str().unwrap());
-            if let Err(e) = stream.write(img_path.as_bytes()) {
-                error!("failed to writing request to model server: {}", e);
-                return reject;
-            }
+    let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
+    let conns = update_conns_counter.lock().unwrap();
+    let mut stream = conns.get(&req.expression).unwrap();
+    let mut cwd = env::current_dir().unwrap();
+    cwd.push(&img_name);
+    let img_path = String::from(cwd.to_str().unwrap());
+    if let Err(e) = stream.write(img_path.as_bytes()) {
+        error!("failed to writing request to model server: {}", e);
+        return reject;
+    }
 
-            let mut buffer = [0 as u8; BUFFER_SIZE];
-            match stream.read(&mut buffer) {
-                Ok(_) => {
-                    let pred_str = String::from_utf8(vec![buffer.to_vec()[0]]).unwrap();
-                    pred_str.trim().parse::<u8>().unwrap()
-                }
-                Err(e) => {
-                    error!("failed reading from model server: {}", e);
-                    return reject;
-                }
-            }
+    let mut buffer = [0 as u8; BUFFER_SIZE];
+    let prediction = match stream.read(&mut buffer) {
+        Ok(_) => {
+            let pred_str = String::from_utf8(vec![buffer.to_vec()[0]]).unwrap();
+            pred_str.trim().parse::<u8>().unwrap()
         }
         Err(e) => {
-            error!("failed to connect to model server: {}", e);
+            error!("failed reading from model server: {}", e);
             return reject;
         }
     };
+    delete_image(&img_name);
 
     // Create and return prediction response.
     match prediction {
@@ -159,13 +205,58 @@ fn handle_request(req: &Request) -> Result<Response, io::Error> {
     }
 }
 
+fn send_response(stream: TcpStream, rx: Receiver<Response>) {
+    let mut writer = BufWriter::new(&stream);
+    loop {
+        let response = match rx.recv() {
+            Ok(resp) => resp,
+            Err(_) => {
+                info!("response thread disconnected from client");
+                return; // client died
+            }
+        };
+        let serialized = response.serialize();
+        if writer.write_all(serialized.as_bytes()).is_err() {
+            info!("response thread disconnected from client");
+            return; // client died
+        }
+        if writer.flush().is_err() {
+            info!("response thread disconnected from client");
+            return; // client died
+        }
+    }
+}
+
+fn handle_request(tx: SyncSender<Response>, request: Request) {
+    let response = match generate_response(&request) {
+        Ok(resp) => resp,
+        Err(_) => {
+            return;
+        }
+    };
+
+    if tx.send(response).is_err() {
+        info!("handle request thread disconnected from client");
+        return; // client died
+    }
+}
+
 fn handle_client(stream: TcpStream, pool: Pool, task: String) {
     let mut reader = BufReader::new(&stream);
-    let mut writer = BufWriter::new(&stream);
     let mut buffer = Vec::new();
+    let (tx, rx) = sync_channel::<Response>(0);
+
+    // Spawn thread to send responses to client.
+    let resp_stream = stream.try_clone().unwrap();
+    thread::spawn(move || {
+        send_response(resp_stream, rx);
+    });
+
+    let workers = ThreadPool::new(4);
     'read: while match reader.read_until(b'\n', &mut buffer) {
         Ok(size) => {
             if size == 0 {
+                debug!("client disconnected");
                 break 'read;
             }
             trace!("stream read {} bytes", size);
@@ -178,44 +269,46 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                 }
             };
 
-            let response = match handle_request(&request) {
-                Ok(resp) => resp,
-                Err(_) => {
-                    continue 'read;
-                }
-            };
-
-            let serialized = response.serialize();
-            writer.write_all(serialized.as_bytes()).unwrap();
-            writer.flush().unwrap();
-            buffer.clear();
-
             // Spawn a thread to write request metadata to the database.
-            let pool = pool.clone();
-            let task = task.clone();
-            let slice_key = hash::to_slice_key(&request.expression);
+            let db_pool = pool.clone();
+            let db_task = task.clone();
+            let db_expr = request.expression.clone();
+            let slice_key = hash::to_slice_key(&db_expr);
             thread::spawn(move || {
-                let mut prep = pool
+                let mut prep = db_pool
                     .prepare(
                         r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)",
                     )
                     .unwrap();
                 prep.execute(params! {
-                    "task" => task,
+                    "task" => db_task,
                     "slice_key" => slice_key,
                 })
                 .unwrap();
                 debug!("wrote request to database");
             });
 
+            // Spawn a thread to handle request.
+            let thread_tx = tx.clone();
+            workers.execute(|| {
+                handle_request(thread_tx, request);
+            });
+
+            buffer.clear();
             true
         }
-        Err(error) => {
-            stream.shutdown(Shutdown::Both).unwrap();
-            error!("stream read failed: {}", error);
+        Err(read_error) => {
+            if let Err(shutdown_error) = stream.shutdown(Shutdown::Both) {
+                error!(
+                    "could not shutdown from client, got error: {}",
+                    shutdown_error
+                );
+            }
+            error!("stream read failed: {}", read_error);
             false
         }
     } {}
+    workers.join()
 }
 
 // Update local slice assignments. Assumes that assigner handle coalescing.
@@ -237,26 +330,19 @@ fn update_assignments(assigned: Vec<Slice>, unassigned: Vec<Slice>) {
 
 fn update_model(expr: &Expression, model_path: &str) -> Result<(), io::Error> {
     let anger_is_assigned = expression_is_assigned(expr);
-    let update_counter = Arc::clone(&MODEL_PROCS_COUNTER);
-    let mut model_procs = update_counter.write().unwrap();
+    let update_proc_counter = Arc::clone(&MODEL_PROCS_COUNTER);
+    let mut model_procs = update_proc_counter.write().unwrap();
 
     if anger_is_assigned && !model_procs.contains_key(expr) {
         trace!("starting {:?} inference model", expr);
-        let child = match start_model(&model_path) {
-            Ok(proc) => proc,
-            Err(e) => {
-                error!("failed to start {:?} model: {}", expr, e);
-                return Err(e);
-            }
-        };
-        model_procs.insert(expr.clone(), child);
-
-        // Sleep to ensure model process is ready.
-        thread::sleep(Duration::from_millis(8000));
+        if let Err(e) = start_model(&model_path, expr.clone(), &mut model_procs) {
+            error!("failed to start {:?} model: {}", expr, e);
+            return Err(e);
+        }
         trace!("started {:?} inference model", expr);
     } else if !anger_is_assigned && model_procs.contains_key(expr) {
         trace!("killing {:?} inference model", expr);
-        kill_model(model_procs.get_mut(expr).unwrap()).unwrap();
+        kill_model(expr.clone(), &mut model_procs);
         trace!("killed {:?} inference model", expr);
     }
 
