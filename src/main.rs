@@ -193,6 +193,7 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
             // Spawn a thread to write request metadata to the database.
             let pool = pool.clone();
             let task = task.clone();
+            let slice_key = hash::to_slice_key(&request.expression);
             thread::spawn(move || {
                 let mut prep = pool
                     .prepare(
@@ -201,7 +202,7 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
                     .unwrap();
                 prep.execute(params! {
                     "task" => task,
-                    "expression" => request.expression as i32,
+                    "slice_key" => slice_key,
                 })
                 .unwrap();
                 debug!("wrote request to database");
