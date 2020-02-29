@@ -277,7 +277,7 @@ fn handle_client(stream: TcpStream, pool: Pool, task: String) {
             thread::spawn(move || {
                 let mut prep = db_pool
                     .prepare(
-                        r"INSERT INTO expressions (task, expression) VALUES (:task, :expression)",
+                        r"INSERT INTO expressions (task, slice_key) VALUES (:task, :slice_key)",
                     )
                     .unwrap();
                 prep.execute(params! {
