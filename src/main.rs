@@ -166,7 +166,7 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
     }
 
     // Send prediction request to child proc and listen for result.
-    let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
+    /*let update_conns_counter = Arc::clone(&MODEL_CONNS_COUNTER);
     let conns = update_conns_counter.lock().unwrap();
     let mut stream = conns.get(&req.expression).unwrap();
     let mut cwd = env::current_dir().unwrap();
@@ -187,7 +187,8 @@ fn generate_response(req: &Request) -> Result<Response, io::Error> {
             error!("failed reading from model server: {}", e);
             return reject;
         }
-    };
+    };*/
+    let prediction = 1;
     delete_image(&img_name);
 
     // Create and return prediction response.
@@ -390,10 +391,10 @@ fn run_slicelet() {
                         };
 
                         update_assignments(update.assigned, update.unassigned);
-                        if let Err(e) = update_models() {
+                        /*if let Err(e) = update_models() {
                             error!("could not update models: {}", e);
                             process::exit(1);
-                        }
+                        }*/
                         true
                     }
                     Err(e) => {
